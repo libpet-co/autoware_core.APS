@@ -41,7 +41,7 @@ inline visualization_msgs::msg::MarkerArray createVirtualWallMarkerArray(
   {
     auto marker = create_default_marker(
       "map", now, ns_prefix + "virtual_wall", id, visualization_msgs::msg::Marker::CUBE,
-      create_marker_scale(0.1, 5.0, 2.0), color);
+      create_marker_scale(0.1, 2.0, 2.0), color);
 
     marker.pose = vehicle_front_pose;
     marker.pose.position.z += 1.0;
