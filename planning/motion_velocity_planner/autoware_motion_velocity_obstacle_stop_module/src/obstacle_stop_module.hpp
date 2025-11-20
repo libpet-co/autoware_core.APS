@@ -95,7 +95,7 @@ private:
     std::nullopt};
   autoware_utils_system::StopWatch<std::chrono::milliseconds> stop_watch_{};
   mutable std::unordered_map<double, std::vector<Polygon2d>> trajectory_polygon_for_inside_map_{};
-  mutable std::optional<std::vector<Polygon2d>> trajectory_polygon_for_outside_{std::nullopt};
+  mutable std::unordered_map<double, std::vector<Polygon2d>> trajectory_polygon_for_outside_map_{};
   mutable std::optional<std::vector<Polygon2d>> decimated_traj_polys_{std::nullopt};
   mutable std::shared_ptr<autoware_utils_debug::TimeKeeper> time_keeper_{};
 

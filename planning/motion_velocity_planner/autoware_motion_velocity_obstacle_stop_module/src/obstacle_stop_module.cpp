@@ -210,7 +210,7 @@ VelocityPlanningResult ObstacleStopModule::plan(
     StopPlanningDebugInfo::TYPE::EGO_ACCELERATION,
     planner_data->current_acceleration.accel.accel.linear.x);
   trajectory_polygon_for_inside_map_.clear();
-  trajectory_polygon_for_outside_ = std::nullopt;
+  trajectory_polygon_for_outside_map_.clear();
   decimated_traj_polys_ = std::nullopt;
 
   // 2. pre-process
@@ -452,7 +452,7 @@ std::vector<StopObstacle> ObstacleStopModule::filter_stop_obstacle_for_point_clo
 
   // calculated decimated trajectory points and trajectory polygon
   const auto decimated_traj_polys = polygon_utils::create_one_step_polygons(
-    decimated_traj_points, vehicle_info, odometry.pose.pose, 0.0,
+    decimated_traj_points, vehicle_info, odometry.pose.pose, obstacle_filtering_param_.max_lat_margin,
     tp.enable_to_consider_current_pose, tp.time_to_convergence, tp.decimate_trajectory_step_length);
 
   const std::vector<geometry_msgs::msg::Point> stop_points = convert_point_cloud_to_stop_points(
@@ -731,8 +731,9 @@ std::optional<StopObstacle> ObstacleStopModule::filter_outside_stop_obstacle_for
 
   const auto & p = trajectory_polygon_collision_check;
   const auto decimated_traj_polys_with_lat_margin = get_trajectory_polygon_for_outside(
-    decimated_traj_points, vehicle_info, odometry.pose.pose, 0.0, p.enable_to_consider_current_pose,
-    p.time_to_convergence, p.decimate_trajectory_step_length);
+    decimated_traj_points, vehicle_info, odometry.pose.pose, max_lat_margin,
+    p.enable_to_consider_current_pose, p.time_to_convergence, p.decimate_trajectory_step_length);
+  debug_data_ptr_->decimated_traj_polys = decimated_traj_polys_with_lat_margin;
 
   const auto get_collision_point =
     [&]() -> std::optional<std::pair<geometry_msgs::msg::Point, double>> {
@@ -1086,7 +1087,7 @@ void ObstacleStopModule::publish_debug_info()
   auto decimated_traj_polys_marker = autoware_utils_visualization::create_default_marker(
     "map", clock_->now(), "detection_area", 0, Marker::LINE_LIST,
     autoware_utils_visualization::create_marker_scale(0.01, 0.0, 0.0),
-    autoware_utils_visualization::create_marker_color(0.0, 1.0, 0.0, 0.999));
+    autoware_utils_visualization::create_marker_color(1.0, 1.0, 0.0, 0.999));
   for (const auto & decimated_traj_poly : debug_data_ptr_->decimated_traj_polys) {
     for (size_t dp_idx = 0; dp_idx < decimated_traj_poly.outer().size(); ++dp_idx) {
       const auto & current_point = decimated_traj_poly.outer().at(dp_idx);
@@ -1170,12 +1171,13 @@ std::vector<Polygon2d> ObstacleStopModule::get_trajectory_polygon_for_outside(
   const bool enable_to_consider_current_pose, const double time_to_convergence,
   const double decimate_trajectory_step_length) const
 {
-  if (!trajectory_polygon_for_outside_) {
-    trajectory_polygon_for_outside_ = polygon_utils::create_one_step_polygons(
+  if (trajectory_polygon_for_outside_map_.count(lat_margin) == 0) {
+    const auto traj_polys = polygon_utils::create_one_step_polygons(
       decimated_traj_points, vehicle_info, current_ego_pose, lat_margin,
       enable_to_consider_current_pose, time_to_convergence, decimate_trajectory_step_length);
+    trajectory_polygon_for_outside_map_.emplace(lat_margin, traj_polys);
   }
-  return *trajectory_polygon_for_outside_;
+  return trajectory_polygon_for_outside_map_.at(lat_margin);
 }
 
 void ObstacleStopModule::check_consistency(
