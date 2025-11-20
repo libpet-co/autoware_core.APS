@@ -132,7 +132,7 @@ visualization_msgs::msg::MarkerArray createStopVirtualWallMarker(
     pose, longitudinal_offset * (is_driving_forward ? 1.0 : -1.0), 0.0, 0.0);
   return createVirtualWallMarkerArray(
     pose_with_offset, module_name, ns_prefix + "stop_", now, id,
-    create_marker_color(1.0, 0.0, 0.0, 0.5));
+    create_marker_color(1.0, 0.0, 0.0, 0.2));
 }
 
 visualization_msgs::msg::MarkerArray createSlowDownVirtualWallMarker(
@@ -144,7 +144,7 @@ visualization_msgs::msg::MarkerArray createSlowDownVirtualWallMarker(
     pose, longitudinal_offset * (is_driving_forward ? 1.0 : -1.0), 0.0, 0.0);
   return createVirtualWallMarkerArray(
     pose_with_offset, module_name, ns_prefix + "slow_down_", now, id,
-    create_marker_color(1.0, 1.0, 0.0, 0.5));
+    create_marker_color(1.0, 1.0, 0.0, 0.2));
 }
 
 visualization_msgs::msg::MarkerArray createDeadLineVirtualWallMarker(
@@ -156,7 +156,7 @@ visualization_msgs::msg::MarkerArray createDeadLineVirtualWallMarker(
     pose, longitudinal_offset * (is_driving_forward ? 1.0 : -1.0), 0.0, 0.0);
   return createVirtualWallMarkerArray(
     pose_with_offset, module_name, ns_prefix + "dead_line_", now, id,
-    create_marker_color(0.0, 1.0, 0.0, 0.5));
+    create_marker_color(0.0, 1.0, 0.0, 0.2));
 }
 
 visualization_msgs::msg::MarkerArray createIntendedPassVirtualMarker(
@@ -168,7 +168,7 @@ visualization_msgs::msg::MarkerArray createIntendedPassVirtualMarker(
     pose, longitudinal_offset * (is_driving_forward ? 1.0 : -1.0), 0.0, 0.0);
   return createIntendedPassArrowMarkerArray(
     pose_with_offset, module_name, ns_prefix + "intended_pass_", now, id,
-    create_marker_color(0.77, 0.77, 0.77, 0.5));
+    create_marker_color(0.77, 0.77, 0.77, 0.2));
 }
 
 visualization_msgs::msg::MarkerArray createDeletedStopVirtualWallMarker(
