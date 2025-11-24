@@ -35,16 +35,17 @@ inline visualization_msgs::msg::MarkerArray createVirtualWallMarkerArray(
   const std::string & ns_prefix, const rclcpp::Time & now, const int32_t id,
   const std_msgs::msg::ColorRGBA & color)
 {
+  (void)module_name;  // text markers are intentionally blank to hide the label
   visualization_msgs::msg::MarkerArray marker_array;
 
   // Virtual Wall
   {
     auto marker = create_default_marker(
       "map", now, ns_prefix + "virtual_wall", id, visualization_msgs::msg::Marker::CUBE,
-      create_marker_scale(0.1, 2.0, 2.0), color);
+      create_marker_scale(0.1, 2.0, 1.5), color);
 
     marker.pose = vehicle_front_pose;
-    marker.pose.position.z += 1.0;
+    marker.pose.position.z += 0.75;
 
     marker_array.markers.push_back(marker);
   }
@@ -57,7 +58,8 @@ inline visualization_msgs::msg::MarkerArray createVirtualWallMarkerArray(
 
     marker.pose = vehicle_front_pose;
     marker.pose.position.z += 2.0;
-    marker.text = module_name;
+    marker.text.clear();
+    marker.color.a = 0.0;
 
     marker_array.markers.push_back(marker);
   }
@@ -90,6 +92,7 @@ inline visualization_msgs::msg::MarkerArray createIntendedPassArrowMarkerArray(
   const std::string & ns_prefix, const rclcpp::Time & now, const int32_t id,
   const std_msgs::msg::ColorRGBA & color)
 {
+  (void)module_name;  // text markers are intentionally blank to hide the label
   visualization_msgs::msg::MarkerArray marker_array;
 
   // Arrow
@@ -111,7 +114,8 @@ inline visualization_msgs::msg::MarkerArray createIntendedPassArrowMarkerArray(
 
     marker.pose = vehicle_front_pose;
     marker.pose.position.z += 2.0;
-    marker.text = module_name;
+    marker.text.clear();
+    marker.color.a = 0.0;
 
     marker_array.markers.push_back(marker);
   }
