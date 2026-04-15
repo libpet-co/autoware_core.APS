@@ -1905,6 +1905,7 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
   // road lanelet). In that case, find the closest lanelet instead (within some maximum range).
   constexpr auto max_search_range = 20.0;
   auto start_lanelets = getRoadLaneletsAtPose(start_checkpoint);
+  const bool is_start_pose_offroad = start_lanelets.empty(); // Use this flag to relax yaw constraint for offroad start pose (used for autoware_lanelet_rejoin_planner package).
   lanelet::ConstLanelet start_lanelet;
   if (start_lanelets.empty()) {
     const lanelet::BasicPoint2d p(start_checkpoint.position.x, start_checkpoint.position.y);
@@ -1998,7 +1999,9 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
     double pose_yaw = tf2::getYaw(start_checkpoint.orientation);
     double angle_diff = std::abs(autoware_utils_math::normalize_radian(lanelet_angle - pose_yaw));
 
-    bool is_proper_angle = angle_diff <= std::abs(yaw_threshold);
+    // When starting offroad, the closest road-lane projection is only used to anchor the route.
+    // Keep the regular yaw constraint on-road, but do not let it reject offroad goals outright.
+    const bool is_proper_angle = is_start_pose_offroad || angle_diff <= std::abs(yaw_threshold);
 
     optional_route = routing_graph_ptr_->getRoute(st_llt, goal_lanelet, 0);
     if (!optional_route || !is_proper_angle) {
