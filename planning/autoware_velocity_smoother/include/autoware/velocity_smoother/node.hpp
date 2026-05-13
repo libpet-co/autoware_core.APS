@@ -45,8 +45,11 @@
 #include "autoware_planning_msgs/msg/trajectory_point.hpp"
 #include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
+#include <atomic>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -68,6 +71,7 @@ using geometry_msgs::msg::AccelWithCovarianceStamped;
 using geometry_msgs::msg::Pose;
 using geometry_msgs::msg::PoseStamped;
 using nav_msgs::msg::Odometry;
+using std_msgs::msg::Bool;
 using visualization_msgs::msg::MarkerArray;
 
 struct Motion
@@ -88,6 +92,7 @@ private:
   rclcpp::Publisher<Trajectory>::SharedPtr pub_trajectory_;
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_virtual_wall_;
   rclcpp::Subscription<Trajectory>::SharedPtr sub_current_trajectory_;
+  rclcpp::Subscription<Bool>::SharedPtr sub_stale_stop_recovery_gate_;
   autoware_utils_rclcpp::InterProcessPollingSubscriber<Odometry> sub_current_odometry_{
     this, "/localization/kinematic_state"};
   autoware_utils_rclcpp::InterProcessPollingSubscriber<AccelWithCovarianceStamped>
@@ -184,6 +189,7 @@ private:
   double over_stop_velocity_warn_thr_;  // threshold to publish over velocity warn
 
   mutable rclcpp::Clock::SharedPtr clock_;
+  std::atomic<int64_t> stale_stop_recovery_gate_stamp_ns_{0};
 
   void setupSmoother(const double wheelbase);
 
@@ -219,6 +225,8 @@ private:
   bool smoothVelocity(
     const TrajectoryPoints & input, const size_t input_closest,
     TrajectoryPoints & traj_smoothed) const;
+
+  bool isStaleStopRecoveryGateActive() const;
 
   std::pair<Motion, InitializeType> calcInitialMotion(
     const TrajectoryPoints & input_traj, const size_t input_closest) const;

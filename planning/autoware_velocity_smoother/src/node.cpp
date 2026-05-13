@@ -34,6 +34,30 @@
 // clang-format on
 namespace autoware::velocity_smoother
 {
+namespace
+{
+constexpr double kStaleStopRecoveryGateTimeoutSec = 0.3;
+constexpr double kStaleStopRecoveryPrevStopVelocityMps = 0.05;
+constexpr double kStaleStopRecoveryMinEgoVelocityMps = 0.15;
+constexpr double kStaleStopRecoveryMinInputVelocityMps = 0.15;
+constexpr double kStaleStopRecoveryMinStopDistanceM = 3.0;
+
+double calcForwardStopDistance(const TrajectoryPoints & trajectory, const size_t closest)
+{
+  if (closest >= trajectory.size()) {
+    return 0.0;
+  }
+
+  const auto stop_idx = autoware::motion_utils::searchZeroVelocityIndex(trajectory, closest);
+  if (!stop_idx) {
+    return std::numeric_limits<double>::max();
+  }
+
+  return std::max(
+    0.0, autoware::motion_utils::calcSignedArcLength(trajectory, closest, *stop_idx));
+}
+}  // namespace
+
 VelocitySmootherNode::VelocitySmootherNode(const rclcpp::NodeOptions & node_options)
 : Node("velocity_smoother", node_options),
   diagnostics_interface_(std::make_unique<DiagnosticsInterface>(this, "velocity_smoother"))
@@ -64,6 +88,12 @@ VelocitySmootherNode::VelocitySmootherNode(const rclcpp::NodeOptions & node_opti
   pub_dist_to_stopline_ = create_publisher<Float32Stamped>("~/distance_to_stopline", 1);
   sub_current_trajectory_ = create_subscription<Trajectory>(
     "~/input/trajectory", 1, std::bind(&VelocitySmootherNode::onCurrentTrajectory, this, _1));
+  // Used by lanelet rejoin to recover only during an explicit, short-lived handoff window.
+  sub_stale_stop_recovery_gate_ = create_subscription<Bool>(
+    "~/input/stale_stop_recovery_gate", rclcpp::QoS{1}, [this](const Bool::ConstSharedPtr msg) {
+      const auto stamp_ns = msg && msg->data ? get_clock()->now().nanoseconds() : 0;
+      stale_stop_recovery_gate_stamp_ns_.store(stamp_ns, std::memory_order_release);
+    });
 
   // parameter update
   set_param_res_ =
@@ -779,6 +809,18 @@ void VelocitySmootherNode::publishStopDistance(const TrajectoryPoints & trajecto
   pub_dist_to_stopline_->publish(dist_to_stopline);
 }
 
+bool VelocitySmootherNode::isStaleStopRecoveryGateActive() const
+{
+  const auto stamp_ns = stale_stop_recovery_gate_stamp_ns_.load(std::memory_order_acquire);
+  if (stamp_ns <= 0) {
+    return false;
+  }
+
+  const double age = static_cast<double>(clock_->now().nanoseconds() - stamp_ns) * 1.0e-9;
+  // Expire the gate quickly so this recovery cannot leak into normal lane driving.
+  return 0.0 <= age && age <= kStaleStopRecoveryGateTimeoutSec;
+}
+
 std::pair<Motion, VelocitySmootherNode::InitializeType> VelocitySmootherNode::calcInitialMotion(
   const TrajectoryPoints & input_traj, const size_t input_closest) const
 {
@@ -807,6 +849,29 @@ std::pair<Motion, VelocitySmootherNode::InitializeType> VelocitySmootherNode::ca
       desired_vel, vehicle_speed, vel_error, node_param_.replan_vel_deviation);
     Motion initial_motion = {vehicle_speed, desired_acc};  // TODO(Horibe): use current acc
     return {initial_motion, InitializeType::LARGE_DEVIATION_REPLAN};
+  }
+
+  if (isStaleStopRecoveryGateActive()) {
+    // Rejoin handoff can leave the previous output at zero while lane driving is already moving.
+    const bool prev_output_is_stopped =
+      std::fabs(desired_vel) <= kStaleStopRecoveryPrevStopVelocityMps;
+    const bool ego_is_already_moving = vehicle_speed >= kStaleStopRecoveryMinEgoVelocityMps;
+    const bool input_requests_motion = target_vel >= kStaleStopRecoveryMinInputVelocityMps;
+    const double stop_dist = calcForwardStopDistance(input_traj, input_closest);
+    const bool no_close_stop = stop_dist >= kStaleStopRecoveryMinStopDistanceM;
+
+    if (prev_output_is_stopped && ego_is_already_moving && input_requests_motion && no_close_stop) {
+      const auto p = smoother_->getBaseParam();
+      const double v0 = std::min(vehicle_speed, target_vel);
+      const double a0 = std::clamp(vehicle_acceleration, p.min_decel, p.max_accel);
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *clock_, 3000,
+        "calcInitialMotion : stale stopped previous output with external recovery gate. "
+        "Plan from ego speed. desired_vel=%.3f, vehicle_speed=%.3f, target_vel=%.3f, "
+        "stop_dist=%.3f",
+        desired_vel, vehicle_speed, target_vel, stop_dist);
+      return {Motion{v0, a0}, InitializeType::LARGE_DEVIATION_REPLAN};
+    }
   }
 
   // if current vehicle velocity is low && base_desired speed is high,
