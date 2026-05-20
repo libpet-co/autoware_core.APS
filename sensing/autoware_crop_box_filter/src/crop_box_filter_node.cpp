@@ -197,9 +197,9 @@ void CropBoxFilter::filter_pointcloud(const PointCloud2ConstPtr & cloud, PointCl
   }
 
   if (skipped_count > 0) {
-    RCLCPP_WARN_THROTTLE(
-      get_logger(), *get_clock(), 1000, "%d points contained NaN values and have been ignored",
-      skipped_count);
+    // RCLCPP_WARN_THROTTLE(
+    //   get_logger(), *get_clock(), 1000, "%d points contained NaN values and have been ignored",
+    //   skipped_count);
   }
 
   // construct output cloud
