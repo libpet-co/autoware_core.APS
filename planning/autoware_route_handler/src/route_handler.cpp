@@ -1897,7 +1897,8 @@ lanelet::ConstLanelets RouteHandler::getNeighborsWithinRoute(
 
 bool RouteHandler::planPathLaneletsBetweenCheckpoints(
   const Pose & start_checkpoint, const Pose & goal_checkpoint,
-  lanelet::ConstLanelets * path_lanelets, const bool consider_no_drivable_lanes) const
+  lanelet::ConstLanelets * path_lanelets, const bool consider_no_drivable_lanes,
+  const bool allow_offroad_start_yaw_relaxation) const
 {
   // Find lanelets for start point. First, find all lanelets containing the start point to calculate
   // all possible route later. It fails when the point is not located on any road lanelet (e.g. the
@@ -1905,6 +1906,7 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
   // road lanelet). In that case, find the closest lanelet instead (within some maximum range).
   constexpr auto max_search_range = 20.0;
   auto start_lanelets = getRoadLaneletsAtPose(start_checkpoint);
+  const bool is_start_pose_offroad = start_lanelets.empty();
   lanelet::ConstLanelet start_lanelet;
   if (start_lanelets.empty()) {
     const lanelet::BasicPoint2d p(start_checkpoint.position.x, start_checkpoint.position.y);
@@ -1998,7 +2000,10 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
     double pose_yaw = tf2::getYaw(start_checkpoint.orientation);
     double angle_diff = std::abs(autoware_utils_math::normalize_radian(lanelet_angle - pose_yaw));
 
-    bool is_proper_angle = angle_diff <= std::abs(yaw_threshold);
+    // Keep the regular yaw constraint unless a caller explicitly opts into offroad anchoring.
+    const bool is_proper_angle =
+      (allow_offroad_start_yaw_relaxation && is_start_pose_offroad) ||
+      angle_diff <= std::abs(yaw_threshold);
 
     optional_route = routing_graph_ptr_->getRoute(st_llt, goal_lanelet, 0);
     if (!optional_route || !is_proper_angle) {
