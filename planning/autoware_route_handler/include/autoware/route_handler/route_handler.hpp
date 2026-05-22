@@ -99,6 +99,11 @@ public:
     const Pose & start_checkpoint, const Pose & goal_checkpoint,
     lanelet::ConstLanelets * path_lanelets, const bool consider_no_drivable_lanes = false,
     const bool allow_offroad_start_yaw_relaxation = false) const;
+  bool planPathLaneletsBetweenCheckpoints(
+    const Pose & start_checkpoint, const Pose & goal_checkpoint,
+    lanelet::ConstLanelets * path_lanelets, const bool consider_no_drivable_lanes,
+    const bool allow_offroad_start_yaw_relaxation,
+    const bool allow_onroad_start_yaw_relaxation) const;
   std::vector<LaneletSegment> createMapSegments(const lanelet::ConstLanelets & path_lanelets) const;
   static bool isRouteLooped(const RouteSections & route_sections);
 
