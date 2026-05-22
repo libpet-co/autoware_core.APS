@@ -1900,6 +1900,17 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
   lanelet::ConstLanelets * path_lanelets, const bool consider_no_drivable_lanes,
   const bool allow_offroad_start_yaw_relaxation) const
 {
+  return planPathLaneletsBetweenCheckpoints(
+    start_checkpoint, goal_checkpoint, path_lanelets, consider_no_drivable_lanes,
+    allow_offroad_start_yaw_relaxation, false);
+}
+
+bool RouteHandler::planPathLaneletsBetweenCheckpoints(
+  const Pose & start_checkpoint, const Pose & goal_checkpoint,
+  lanelet::ConstLanelets * path_lanelets, const bool consider_no_drivable_lanes,
+  const bool allow_offroad_start_yaw_relaxation,
+  const bool allow_onroad_start_yaw_relaxation) const
+{
   // Find lanelets for start point. First, find all lanelets containing the start point to calculate
   // all possible route later. It fails when the point is not located on any road lanelet (e.g. the
   // start point is located out of any lanelets or road_shoulder lanelet which is not contained in
@@ -1992,6 +2003,35 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
   double min_route_cost = std::numeric_limits<double>::max();
   constexpr double yaw_threshold = M_PI / 2.0;
   constexpr double angle_diff_weight = 1000.0;
+  constexpr double onroad_relaxation_ambiguous_lanelet_yaw_threshold = M_PI / 4.0;
+
+  const bool is_onroad_start_yaw_relaxation_unambiguous = [&]() {
+    if (
+      !allow_onroad_start_yaw_relaxation || is_start_pose_offroad ||
+      start_lanelets.size() <= 1) {
+      return true;
+    }
+    for (size_t i = 0; i < start_lanelets.size(); ++i) {
+      const double yaw_i =
+        lanelet::utils::getLaneletAngle(start_lanelets[i], start_checkpoint.position);
+      for (size_t j = i + 1; j < start_lanelets.size(); ++j) {
+        const double yaw_j =
+          lanelet::utils::getLaneletAngle(start_lanelets[j], start_checkpoint.position);
+        const double lanelet_yaw_diff =
+          std::abs(autoware_utils_math::normalize_radian(yaw_i - yaw_j));
+        if (lanelet_yaw_diff >= onroad_relaxation_ambiguous_lanelet_yaw_threshold) {
+          RCLCPP_WARN(
+            logger_,
+            "Ignoring on-road start yaw relaxation because start pose is on ambiguous lanelets "
+            "%ld and %ld (yaw diff %.2f deg)",
+            start_lanelets[i].id(), start_lanelets[j].id(),
+            lanelet_yaw_diff * 180.0 / M_PI);
+          return false;
+        }
+      }
+    }
+    return true;
+  }();
 
   for (const auto & st_llt : start_lanelets) {
     // check if the angle difference between start_checkpoint and start lanelet center line
@@ -2000,10 +2040,12 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
     double pose_yaw = tf2::getYaw(start_checkpoint.orientation);
     double angle_diff = std::abs(autoware_utils_math::normalize_radian(lanelet_angle - pose_yaw));
 
-    // Keep the regular yaw constraint unless a caller explicitly opts into offroad anchoring.
-    const bool is_proper_angle =
+    // Keep the regular yaw constraint unless a caller explicitly opts into start yaw relaxation.
+    const bool can_relax_start_yaw =
       (allow_offroad_start_yaw_relaxation && is_start_pose_offroad) ||
-      angle_diff <= std::abs(yaw_threshold);
+      (allow_onroad_start_yaw_relaxation && !is_start_pose_offroad &&
+       is_onroad_start_yaw_relaxation_unambiguous);
+    const bool is_proper_angle = can_relax_start_yaw || angle_diff <= std::abs(yaw_threshold);
 
     optional_route = routing_graph_ptr_->getRoute(st_llt, goal_lanelet, 0);
     if (!optional_route || !is_proper_angle) {
@@ -2026,10 +2068,13 @@ bool RouteHandler::planPathLaneletsBetweenCheckpoints(
       }
     }
     const double optional_route_length = optional_route->length2d();
-    const double optional_route_cost = optional_route_length + angle_diff_weight * angle_diff;
+    const double angle_diff_cost = can_relax_start_yaw ? 0.0 : angle_diff_weight * angle_diff;
+    const double optional_route_cost = optional_route_length + angle_diff_cost;
     RCLCPP_DEBUG(
-      logger_, "Lanelet ID %ld: Route length = %.1f, Angle Diff = %.4f rad, Route cost = %.2f",
-      st_llt.id(), optional_route_length, angle_diff, optional_route_cost);
+      logger_,
+      "Lanelet ID %ld: Route length = %.1f, Angle Diff = %.4f rad, Angle Cost = %.2f, Route "
+      "cost = %.2f",
+      st_llt.id(), optional_route_length, angle_diff, angle_diff_cost, optional_route_cost);
     if (optional_route_cost < min_route_cost) {
       min_route_cost = optional_route_cost;
       shortest_path = optional_route->shortestPath();
